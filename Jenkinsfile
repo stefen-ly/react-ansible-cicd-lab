@@ -9,6 +9,7 @@ pipeline {
 
     environment {
         IMAGE_REPO = 'ghcr.io/stefen-ly/react-ansible-cicd-lab'
+        ANSIBLE_HOST = '172.31.34.164'
     }
 
     stages {
@@ -29,7 +30,7 @@ pipeline {
                     env.FULL_IMAGE = "${env.IMAGE_REPO}:${env.IMAGE_TAG}"
                 }
 
-                echo "Building ${env.FULL_IMAGE}"
+                echo "Image: ${env.FULL_IMAGE}"
             }
         }
 
@@ -68,15 +69,37 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy with Ansible') {
+            steps {
+                sshagent(credentials: ['ansible-controller-ssh']) {
+                    sh '''
+                        set -eu
+
+                        ssh \
+                          -o BatchMode=yes \
+                          -o StrictHostKeyChecking=yes \
+                          -o UserKnownHostsFile=/var/lib/jenkins/.ssh/known_hosts \
+                          ubuntu@"$ANSIBLE_HOST" \
+                          "cd /home/ubuntu/ansible-aws-mini-project && \
+                           . .venv/bin/activate && \
+                           ansible-playbook \
+                             -i scripts/custom_inventory.py \
+                             playbooks/deploy-cicd-react.yml \
+                             -e cicd_image=$FULL_IMAGE"
+                    '''
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo 'CI Pipeline SUCCESS: Docker image pushed to GHCR.'
+            echo 'CI/CD Pipeline SUCCESS: React image deployed to AWS.'
         }
 
         failure {
-            echo 'CI Pipeline FAILED: Check Jenkins Console Output.'
+            echo 'CI/CD Pipeline FAILED. Check Console Output.'
         }
     }
 }
